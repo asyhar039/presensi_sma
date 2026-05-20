@@ -7,6 +7,8 @@ require_once __DIR__ . '/../../app/helpers.php';
 requireAdmin();
 
 $guru_list = getAllGuru($conn);
+$kelas_list = getAllKelas($conn);
+$hari_list = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -25,6 +27,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->bind_param("ssi", $nama_mapel, $kode_mapel, $guru_id);
                 
                 if ($stmt->execute()) {
+                    $mapel_id = $conn->insert_id;
+                    
+                    $buat_jadwal = isset($_POST['buat_jadwal']) && $_POST['buat_jadwal'] === '1';
+                    if ($buat_jadwal) {
+                        $kelas_id = intval($_POST['kelas_id'] ?? 0);
+                        $hari = sanitize($_POST['hari'] ?? '');
+                        $jam_mulai = sanitize($_POST['jam_mulai'] ?? '');
+                        $jam_selesai = sanitize($_POST['jam_selesai'] ?? '');
+                        
+                        if ($kelas_id <= 0 || empty($hari) || empty($jam_mulai) || empty($jam_selesai)) {
+                            throw new Exception("Kolom jadwal tidak boleh kosong ketika opsi jadwal langsung diaktifkan");
+                        }
+                        
+                        $stmt_jadwal = $conn->prepare("INSERT INTO jadwal_pelajaran (kelas_id, mata_pelajaran_id, guru_id, hari, jam_mulai, jam_selesai) VALUES (?, ?, ?, ?, ?, ?)");
+                        $stmt_jadwal->bind_param("iiisss", $kelas_id, $mapel_id, $guru_id, $hari, $jam_mulai, $jam_selesai);
+                        $stmt_jadwal->execute();
+                    }
+                    
                     header("Location: index.php?message=success");
                     exit();
                 } else {
@@ -64,6 +84,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <a href="../guru/" class="nav-link"><i class="fas fa-chalkboard-user"></i> Data Guru</a>
             <a href="../kelas/" class="nav-link"><i class="fas fa-school"></i> Data Kelas</a>
             <a href="index.php" class="nav-link active"><i class="fas fa-book"></i> Mata Pelajaran</a>
+            <a href="../jadwal/" class="nav-link"><i class="fas fa-calendar-alt"></i> Jadwal Pelajaran</a>
+            <a href="../absensi/" class="nav-link"><i class="fas fa-clipboard-list"></i> Absensi</a>
+            <a href="../absensi/laporan.php" class="nav-link"><i class="fas fa-chart-bar"></i> Laporan Absensi</a>
             <hr style="border-color: rgba(255,255,255,0.2);">
             <a href="../../public/logout.php" class="nav-link"><i class="fas fa-sign-out-alt"></i> Logout</a>
         </nav>
@@ -101,6 +124,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </select>
                     </div>
 
+                    <div class="card bg-light border-0 mb-4 p-3 shadow-sm rounded-3 mt-4">
+                        <div class="form-check form-switch mb-1">
+                            <input class="form-check-input" type="checkbox" role="switch" id="buat_jadwal" name="buat_jadwal" value="1" onchange="toggleScheduleForm()">
+                            <label class="form-check-label fw-bold text-dark" for="buat_jadwal">
+                                <i class="fas fa-calendar-plus text-primary me-2"></i>Buat Jadwal Pelajaran Langsung
+                            </label>
+                        </div>
+                        
+                        <div id="schedule_form" style="display: none;">
+                            <hr class="my-3">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label text-secondary fw-semibold">Pilih Kelas <span class="text-danger">*</span></label>
+                                    <select class="form-select border-2" id="kelas_id" name="kelas_id">
+                                        <option value="">- Pilih Kelas -</option>
+                                        <?php foreach ($kelas_list as $kelas): ?>
+                                            <option value="<?php echo $kelas['id']; ?>"><?php echo htmlspecialchars($kelas['nama_kelas']); ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label text-secondary fw-semibold">Hari <span class="text-danger">*</span></label>
+                                    <select class="form-select border-2" id="hari" name="hari">
+                                        <option value="">- Pilih Hari -</option>
+                                        <?php foreach ($hari_list as $h): ?>
+                                            <option value="<?php echo $h; ?>"><?php echo $h; ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label text-secondary fw-semibold">Jam Mulai <span class="text-danger">*</span></label>
+                                    <input type="time" class="form-control border-2" id="jam_mulai" name="jam_mulai">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label text-secondary fw-semibold">Jam Selesai <span class="text-danger">*</span></label>
+                                    <input type="time" class="form-control border-2" id="jam_selesai" name="jam_selesai">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <input type="hidden" name="csrf_token" value="<?php echo generateCSRFToken(); ?>">
 
                     <div class="d-grid gap-2 d-md-flex justify-content-md-end">
@@ -113,5 +177,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function toggleScheduleForm() {
+            const checkbox = document.getElementById('buat_jadwal');
+            const form = document.getElementById('schedule_form');
+            const fields = ['kelas_id', 'hari', 'jam_mulai', 'jam_selesai'];
+            
+            if (checkbox.checked) {
+                form.style.display = 'block';
+                fields.forEach(id => {
+                    document.getElementById(id).setAttribute('required', 'required');
+                });
+            } else {
+                form.style.display = 'none';
+                fields.forEach(id => {
+                    document.getElementById(id).removeAttribute('required');
+                    document.getElementById(id).value = '';
+                });
+            }
+        }
+    </script>
 </body>
 </html>

@@ -33,13 +33,13 @@ if ($user['role'] !== 'admin') {
     $result = query("SELECT g.id FROM guru g JOIN users u ON g.user_id = u.id WHERE u.id = $user_id", $conn);
     if ($result->num_rows > 0) {
         $guru = $result->fetch_assoc();
-        $jadwal_result = query("SELECT * FROM jadwal_pelajaran WHERE kelas_id = $kelas_id AND guru_id = {$guru['id']}", $conn);
+        $jadwal_result = query("SELECT j.*, m.nama_mapel FROM jadwal_pelajaran j JOIN mata_pelajaran m ON j.mata_pelajaran_id = m.id WHERE j.kelas_id = $kelas_id AND j.guru_id = {$guru['id']}", $conn);
         $jadwal_list = $jadwal_result->fetch_all(MYSQLI_ASSOC);
     } else {
         $jadwal_list = [];
     }
 } else {
-    $jadwal_result = query("SELECT * FROM jadwal_pelajaran WHERE kelas_id = $kelas_id", $conn);
+    $jadwal_result = query("SELECT j.*, m.nama_mapel FROM jadwal_pelajaran j JOIN mata_pelajaran m ON j.mata_pelajaran_id = m.id WHERE j.kelas_id = $kelas_id", $conn);
     $jadwal_list = $jadwal_result->fetch_all(MYSQLI_ASSOC);
 }
 ?>
@@ -48,10 +48,9 @@ if ($user['role'] !== 'admin') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Scan Barcode Absensi - Sistem Absensi SMA</title>
+    <title>Presensi QR Code - Sistem Absensi SMA</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
         body { background-color: #f5f7fa; }
         .sidebar { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px; position: fixed; width: 250px; left: 0; top: 0; overflow-y: auto; }
@@ -61,9 +60,37 @@ if ($user['role'] !== 'admin') {
         .main-content { margin-left: 250px; padding: 20px; }
         .topbar { background: white; padding: 15px 25px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center; }
         .card { border: none; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-        #reader { width: 100%; max-width: 600px; margin: 0 auto; border-radius: 10px; overflow: hidden; border: 2px solid #ddd; }
-        .scan-history { max-height: 300px; overflow-y: auto; }
-        .beep { display: none; }
+        .scan-history { max-height: 350px; overflow-y: auto; }
+        
+        .qr-code-wrapper {
+            position: relative;
+            background: white;
+            border-radius: 15px;
+            padding: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            display: inline-block;
+            transition: all 0.3s ease;
+        }
+        .qr-code-wrapper:hover {
+            transform: scale(1.02);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.05); opacity: 0.95; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .animate-pulse {
+            animation: pulse 2s infinite ease-in-out;
+        }
+        .status-badge-container {
+            display: inline-block;
+            border-radius: 50px;
+            font-weight: 600;
+            padding: 6px 16px;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
@@ -78,6 +105,7 @@ if ($user['role'] !== 'admin') {
             <a href="../kelas/" class="nav-link"><i class="fas fa-school"></i> Data Kelas</a>
             <?php if ($user['role'] === 'admin'): ?>
                 <a href="../mapel/" class="nav-link"><i class="fas fa-book"></i> Mata Pelajaran</a>
+                <a href="../jadwal/" class="nav-link"><i class="fas fa-calendar-alt"></i> Jadwal Pelajaran</a>
             <?php endif; ?>
             <a href="../absensi/" class="nav-link active"><i class="fas fa-clipboard-list"></i> Absensi</a>
             <a href="../absensi/laporan.php" class="nav-link"><i class="fas fa-chart-bar"></i> Laporan Absensi</a>
@@ -88,7 +116,7 @@ if ($user['role'] !== 'admin') {
 
     <div class="main-content">
         <div class="topbar">
-            <h4>📷 Scan Barcode - <?php echo htmlspecialchars($kelas['nama_kelas']); ?></h4>
+            <h4>📢 Presensi QR Code - <?php echo htmlspecialchars($kelas['nama_kelas']); ?></h4>
             <div>
                 <a href="input.php?kelas_id=<?php echo $kelas['id']; ?>" class="btn btn-secondary btn-sm"><i class="fas fa-keyboard"></i> Input Manual</a>
             </div>
@@ -98,21 +126,49 @@ if ($user['role'] !== 'admin') {
             <div class="col-md-7">
                 <div class="card mb-4">
                     <div class="card-header bg-white py-3">
-                        <h5 class="mb-0">Kamera Scanner</h5>
+                        <h5 class="mb-0"><i class="fas fa-qrcode text-primary me-2"></i>QR Code Presensi</h5>
                     </div>
                     <div class="card-body p-4 text-center">
-                        <div class="alert alert-warning" id="setup-warning">
-                            <i class="fas fa-exclamation-triangle"></i> Silakan pilih Tanggal dan Jadwal terlebih dahulu di panel sebelah kanan untuk mengaktifkan kamera.
+                        <div class="alert alert-warning" id="setup-warning" style="margin-bottom: 0;">
+                            <i class="fas fa-exclamation-triangle"></i> Silakan pilih Tanggal dan Jadwal terlebih dahulu di panel sebelah kanan untuk menampilkan QR Code.
                         </div>
-                        <div id="reader"></div>
-                        <div id="scan-result" class="mt-3"></div>
+                        
+                        <!-- QR Code Container (hidden by default) -->
+                        <div id="qr-container" style="display: none;">
+                            <div class="status-badge-container bg-success text-white mb-3 animate-pulse">
+                                <span class="spinner-grow spinner-grow-sm me-1" role="status" aria-hidden="true" style="width: 12px; height: 12px;"></span>
+                                Presensi Aktif
+                            </div>
+                            
+                            <div>
+                                <div class="qr-code-wrapper border mb-3">
+                                    <img id="qr-image" src="" alt="QR Code Absensi" class="img-fluid" style="width: 280px; height: 280px;">
+                                </div>
+                            </div>
+                            
+                            <div class="text-muted small mb-4">
+                                <i class="fas fa-info-circle text-info"></i> Tampilkan QR Code ini di depan kelas agar siswa dapat memindainya melalui ponsel masing-masing.
+                            </div>
+                            
+                            <!-- Shareable link section -->
+                            <div class="input-group mb-2 mx-auto" style="max-width: 480px;">
+                                <input type="text" id="raw-url" class="form-control bg-light" readonly style="font-size: 13px;">
+                                <button class="btn btn-outline-primary" type="button" id="btn-copy">
+                                    <i class="fas fa-copy"></i> Salin Tautan
+                                </button>
+                            </div>
+                            <div id="copy-toast" class="text-success small" style="display: none; font-weight: 500;">
+                                <i class="fas fa-check-circle"></i> Tautan berhasil disalin!
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
+            
             <div class="col-md-5">
                 <div class="card mb-4">
                     <div class="card-body p-4">
-                        <h5 class="mb-3">Pengaturan Absensi</h5>
+                        <h5 class="mb-3"><i class="fas fa-sliders text-secondary me-2"></i>Pengaturan Absensi</h5>
                         <div class="mb-3">
                             <label class="form-label">Tanggal</label>
                             <input type="date" class="form-control" id="tanggal" value="<?php echo date('Y-m-d'); ?>">
@@ -124,37 +180,35 @@ if ($user['role'] !== 'admin') {
                                 <?php foreach ($jadwal_list as $jadwal): ?>
                                     <option value="<?php echo $jadwal['id']; ?>">
                                         <?php
-                                        $mapel = query("SELECT nama_mapel FROM mata_pelajaran WHERE id = {$jadwal['mata_pelajaran_id']}", $conn)->fetch_assoc();
-                                        echo htmlspecialchars($mapel['nama_mapel']) . " (" . $jadwal['hari'] . " " . substr($jadwal['jam_mulai'], 0, 5) . "-" . substr($jadwal['jam_selesai'], 0, 5) . ")";
+                                        echo htmlspecialchars($jadwal['nama_mapel']) . " (" . $jadwal['hari'] . " " . substr($jadwal['jam_mulai'], 0, 5) . "-" . substr($jadwal['jam_selesai'], 0, 5) . ")";
                                         ?>
                                     </option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
-                        <button class="btn btn-primary w-100" id="btn-start-scan" disabled>
-                            <i class="fas fa-play"></i> Mulai Scan
+                        <button class="btn btn-primary w-100 py-2 fs-6 fw-semibold" id="btn-start-scan" disabled>
+                            <i class="fas fa-play me-1"></i> Aktifkan Presensi QR
                         </button>
                     </div>
                 </div>
 
                 <div class="card">
-                    <div class="card-header bg-white py-3">
-                        <h5 class="mb-0">Siswa Berhasil Diabsen</h5>
+                    <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="fas fa-clipboard-check text-success me-2"></i>Siswa Berhasil Diabsen</h5>
+                        <span class="badge bg-primary rounded-pill" id="attendees-count">0</span>
                     </div>
                     <div class="card-body p-0">
                         <ul class="list-group list-group-flush scan-history" id="history-list">
-                            <li class="list-group-item text-center text-muted" id="empty-history">Belum ada data scan</li>
+                            <li class="list-group-item text-center text-muted py-4" id="empty-history">
+                                <i class="fas fa-users d-block fs-3 mb-2 opacity-50"></i>
+                                Belum ada data presensi masuk
+                            </li>
                         </ul>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-
-    <!-- Beep Sound -->
-    <audio id="beep-sound" class="beep">
-        <source src="data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU" type="audio/wav">
-    </audio>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
@@ -163,140 +217,232 @@ if ($user['role'] !== 'admin') {
             const tanggalInput = document.getElementById('tanggal');
             const btnStart = document.getElementById('btn-start-scan');
             const setupWarning = document.getElementById('setup-warning');
+            const qrContainer = document.getElementById('qr-container');
+            const qrImage = document.getElementById('qr-image');
+            const rawUrlInput = document.getElementById('raw-url');
+            const btnCopy = document.getElementById('btn-copy');
+            const copyToast = document.getElementById('copy-toast');
+            
             const historyList = document.getElementById('history-list');
             const emptyHistory = document.getElementById('empty-history');
-            const scanResult = document.getElementById('scan-result');
+            const attendeesCount = document.getElementById('attendees-count');
             
-            const kelasId = <?php echo $kelas_id; ?>;
-            let html5QrcodeScanner = null;
-            let isScanning = false;
-            let lastScannedCode = null;
-            let scanTimeout = null;
+            let isQRActive = false;
+            let pollInterval = null;
+            let checkedInNisns = [];
 
-            // Audio logic for beep
+            // Audio logic for beep notification
             const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             function playBeep() {
-                const oscillator = audioCtx.createOscillator();
-                const gainNode = audioCtx.createGain();
-                
-                oscillator.type = 'sine';
-                oscillator.frequency.value = 1000;
-                gainNode.gain.value = 0.1;
-                
-                oscillator.connect(gainNode);
-                gainNode.connect(audioCtx.destination);
-                
-                oscillator.start();
-                setTimeout(() => {
-                    oscillator.stop();
-                }, 100);
+                try {
+                    const oscillator = audioCtx.createOscillator();
+                    const gainNode = audioCtx.createGain();
+                    
+                    oscillator.type = 'sine';
+                    oscillator.frequency.value = 900;
+                    gainNode.gain.value = 0.15;
+                    
+                    oscillator.connect(gainNode);
+                    gainNode.connect(audioCtx.destination);
+                    
+                    oscillator.start();
+                    setTimeout(() => {
+                        oscillator.stop();
+                    }, 120);
+                } catch (e) {
+                    console.log('Audio Context error: ', e);
+                }
             }
 
-            // Enable start button if setup is complete
+            // Enable/disable the activation button
             function checkSetup() {
                 if (jadwalSelect.value && tanggalInput.value) {
                     btnStart.disabled = false;
-                    setupWarning.style.display = 'none';
+                    if (!isQRActive) {
+                        setupWarning.style.display = 'block';
+                        setupWarning.innerHTML = '<i class="fas fa-info-circle text-primary"></i> Sesi terkonfigurasi. Silakan klik tombol <b>Aktifkan Presensi QR</b> untuk memulai.';
+                        setupWarning.className = "alert alert-info";
+                    }
                 } else {
                     btnStart.disabled = true;
                     setupWarning.style.display = 'block';
-                    if (isScanning && html5QrcodeScanner) {
-                        html5QrcodeScanner.clear();
-                        isScanning = false;
-                        btnStart.innerHTML = '<i class="fas fa-play"></i> Mulai Scan';
-                        btnStart.classList.replace('btn-danger', 'btn-primary');
-                    }
+                    setupWarning.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Silakan pilih Tanggal dan Jadwal terlebih dahulu di panel sebelah kanan untuk menampilkan QR Code.';
+                    setupWarning.className = "alert alert-warning";
+                    stopQRFlow();
                 }
             }
 
             jadwalSelect.addEventListener('change', checkSetup);
             tanggalInput.addEventListener('change', checkSetup);
 
-            function onScanSuccess(decodedText, decodedResult) {
-                // Prevent duplicate scans within 3 seconds
-                if (decodedText === lastScannedCode) return;
-                
-                lastScannedCode = decodedText;
-                clearTimeout(scanTimeout);
-                scanTimeout = setTimeout(() => {
-                    lastScannedCode = null;
-                }, 3000);
+            // Copy Link function
+            btnCopy.addEventListener('click', function() {
+                rawUrlInput.select();
+                rawUrlInput.setSelectionRange(0, 99999); // For mobile devices
+                navigator.clipboard.writeText(rawUrlInput.value).then(function() {
+                    copyToast.style.display = 'block';
+                    setTimeout(() => {
+                        copyToast.style.display = 'none';
+                    }, 3000);
+                });
+            });
 
+            // Start QR code generation & polling
+            function startQRFlow() {
+                isQRActive = true;
+                
+                // UI changes
+                setupWarning.style.display = 'none';
+                qrContainer.style.display = 'block';
+                
+                // Disable inputs to avoid changing configs while scanning
+                jadwalSelect.disabled = true;
+                tanggalInput.disabled = true;
+                
+                btnStart.innerHTML = '<i class="fas fa-stop me-1"></i> Hentikan Presensi QR';
+                btnStart.classList.replace('btn-primary', 'btn-danger');
+
+                // Dynamic URL generation for student
+                const protocol = window.location.protocol;
+                const host = window.location.host;
+                
+                // Dynamically get the base path (e.g. /presensi_sma)
+                const currentPath = window.location.pathname;
+                const modulesIdx = currentPath.indexOf('/modules/absensi/');
+                const basePath = modulesIdx !== -1 ? currentPath.substring(0, modulesIdx) : '/presensi_sma';
+                
+                const absenUrl = `${protocol}//${host}${basePath}/public/absen.php?jadwal_id=${jadwalSelect.value}&tanggal=${tanggalInput.value}`;
+                
+                // Set text input URL
+                rawUrlInput.value = absenUrl;
+
+                // Load QR Image
+                const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=${encodeURIComponent(absenUrl)}`;
+                qrImage.src = qrApiUrl;
+
+                // Initialize history array
+                checkedInNisns = [];
+                
+                // Load attendees instantly and set interval
+                fetchAttendees();
+                pollInterval = setInterval(fetchAttendees, 3000);
+            }
+
+            // Stop QR flow and polling
+            function stopQRFlow() {
+                isQRActive = false;
+                
+                // UI changes
+                qrContainer.style.display = 'none';
+                
+                // Enable inputs
+                jadwalSelect.disabled = false;
+                tanggalInput.disabled = false;
+                
+                btnStart.innerHTML = '<i class="fas fa-play me-1"></i> Aktifkan Presensi QR';
+                btnStart.classList.replace('btn-danger', 'btn-primary');
+
+                // Clear interval
+                if (pollInterval) {
+                    clearInterval(pollInterval);
+                    pollInterval = null;
+                }
+                
+                checkSetup();
+            }
+
+            // Polling function to get checked-in students
+            function fetchAttendees() {
                 const jadwalId = jadwalSelect.value;
                 const tanggal = tanggalInput.value;
 
-                if (!jadwalId || !tanggal) {
-                    alert('Pilih jadwal dan tanggal terlebih dahulu!');
+                if (!jadwalId || !tanggal) return;
+
+                fetch(`get_attendees.php?jadwal_id=${jadwalId}&tanggal=${tanggal}`)
+                    .then(response => response.json())
+                    .then(res => {
+                        if (res.status === 'success') {
+                            renderAttendees(res.data);
+                        }
+                    })
+                    .catch(err => console.error('Error fetching attendees:', err));
+            }
+
+            // Render list of attendees
+            function renderAttendees(data) {
+                if (data.length === 0) {
+                    historyList.innerHTML = `
+                        <li class="list-group-item text-center text-muted py-4" id="empty-history">
+                            <i class="fas fa-users d-block fs-3 mb-2 opacity-50"></i>
+                            Belum ada data presensi masuk
+                        </li>
+                    `;
+                    attendeesCount.innerText = '0';
+                    checkedInNisns = [];
                     return;
                 }
 
-                playBeep();
-                scanResult.innerHTML = `<div class="alert alert-info">Memproses: ${decodedText}...</div>`;
+                attendeesCount.innerText = data.length;
+                
+                let html = '';
+                let playBeepSound = false;
 
-                // Send to backend
-                const formData = new FormData();
-                formData.append('nisn', decodedText);
-                formData.append('kelas_id', kelasId);
-                formData.append('jadwal_id', jadwalId);
-                formData.append('tanggal', tanggal);
-
-                fetch('process_scan.php', {
-                    method: 'POST',
-                    body: formData
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === 'success') {
-                        scanResult.innerHTML = `<div class="alert alert-success"><i class="fas fa-check-circle"></i> Berhasil absen: <b>${data.nama_siswa}</b></div>`;
-                        
-                        // Add to history
-                        if (emptyHistory) emptyHistory.style.display = 'none';
-                        
-                        const li = document.createElement('li');
-                        li.className = 'list-group-item d-flex justify-content-between align-items-center bg-light';
-                        li.innerHTML = `
-                            <div>
-                                <h6 class="my-0">${data.nama_siswa}</h6>
-                                <small class="text-muted">${decodedText}</small>
-                            </div>
-                            <span class="badge bg-success rounded-pill">Hadir</span>
-                        `;
-                        historyList.insertBefore(li, historyList.firstChild);
-                    } else {
-                        scanResult.innerHTML = `<div class="alert alert-danger"><i class="fas fa-times-circle"></i> Gagal: ${data.message}</div>`;
+                data.forEach(student => {
+                    // If we have a new NISN checked in, trigger beep!
+                    if (!checkedInNisns.includes(student.nisn)) {
+                        checkedInNisns.push(student.nisn);
+                        // Only play sound if this is not the first load of many
+                        if (checkedInNisns.length > 1 || isQRActive) {
+                            playBeepSound = true;
+                        }
                     }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    scanResult.innerHTML = `<div class="alert alert-danger"><i class="fas fa-exclamation-triangle"></i> Terjadi kesalahan jaringan.</div>`;
+
+                    html += `
+                        <li class="list-group-item d-flex justify-content-between align-items-center py-3 border-start border-success border-4">
+                            <div>
+                                <h6 class="my-0 fw-semibold text-dark">${escapeHTML(student.nama_lengkap)}</h6>
+                                <small class="text-muted"><i class="fas fa-id-card me-1"></i>${escapeHTML(student.nisn)}</small>
+                            </div>
+                            <div class="text-end">
+                                <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 rounded-pill mb-1">
+                                    <i class="fas fa-check-circle me-1"></i>Hadir
+                                </span>
+                                <div class="text-muted" style="font-size: 11px;">
+                                    <i class="far fa-clock me-1"></i>${escapeHTML(student.waktu_absen)}
+                                </div>
+                            </div>
+                        </li>
+                    `;
                 });
+
+                historyList.innerHTML = html;
+
+                if (playBeepSound && isQRActive) {
+                    playBeep();
+                }
             }
 
-            function onScanFailure(error) {
-                // handle scan failure, usually better to ignore and keep scanning.
+            // Simple HTML escape helper
+            function escapeHTML(str) {
+                return str.replace(/[&<>'"]/g, 
+                    tag => ({
+                        '&': '&amp;',
+                        '<': '&lt;',
+                        '>': '&gt;',
+                        "'": '&#39;',
+                        '"': '&quot;'
+                    }[tag] || tag)
+                );
             }
 
             btnStart.addEventListener('click', function() {
-                if (!isScanning) {
-                    html5QrcodeScanner = new Html5QrcodeScanner(
-                        "reader",
-                        { fps: 10, qrbox: {width: 250, height: 250} },
-                        /* verbose= */ false);
-                    html5QrcodeScanner.render(onScanSuccess, onScanFailure);
-                    isScanning = true;
-                    btnStart.innerHTML = '<i class="fas fa-stop"></i> Hentikan Scan';
-                    btnStart.classList.replace('btn-primary', 'btn-danger');
+                if (!isQRActive) {
+                    startQRFlow();
                 } else {
-                    if (html5QrcodeScanner) {
-                        html5QrcodeScanner.clear();
-                    }
-                    isScanning = false;
-                    btnStart.innerHTML = '<i class="fas fa-play"></i> Mulai Scan';
-                    btnStart.classList.replace('btn-danger', 'btn-primary');
-                    scanResult.innerHTML = '';
+                    stopQRFlow();
                 }
             });
-            
+
             checkSetup();
         });
     </script>

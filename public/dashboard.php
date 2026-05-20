@@ -52,6 +52,7 @@ if ($user['role'] === 'guru') {
         <a href="../modules/kelas/" class="nav-link"><i class="fas fa-school"></i> Data Kelas</a>
         <?php if ($user['role'] === 'admin'): ?>
             <a href="../modules/mapel/" class="nav-link"><i class="fas fa-book"></i> Mata Pelajaran</a>
+            <a href="../modules/jadwal/" class="nav-link"><i class="fas fa-calendar-alt"></i> Jadwal Pelajaran</a>
         <?php endif; ?>
         <a href="../modules/absensi/" class="nav-link"><i class="fas fa-clipboard-list"></i> Absensi</a>
         <a href="../modules/absensi/laporan.php" class="nav-link"><i class="fas fa-chart-bar"></i> Laporan Absensi</a>

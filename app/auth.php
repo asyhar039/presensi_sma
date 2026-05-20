@@ -47,11 +47,26 @@ function hasRole($role) {
 }
 
 /**
+ * Get dynamic base URL for subfolder or root hosting
+ */
+function getBaseUrl() {
+    $script = $_SERVER['SCRIPT_NAME'] ?? '';
+    if (preg_match('/^(\/[^\/]+)/', $script, $matches)) {
+        $first_dir = $matches[1];
+        if (in_array($first_dir, ['/public', '/modules', '/config', '/app'])) {
+            return '';
+        }
+        return $first_dir;
+    }
+    return '';
+}
+
+/**
  * Require login
  */
 function requireLogin() {
     if (!isLoggedIn()) {
-        header("Location: /public/login.php");
+        header("Location: " . getBaseUrl() . "/public/login.php");
         exit();
     }
 }
@@ -62,7 +77,7 @@ function requireLogin() {
 function requireAdmin() {
     requireLogin();
     if (!hasRole('admin')) {
-        header("Location: /public/dashboard.php");
+        header("Location: " . getBaseUrl() . "/public/dashboard.php");
         exit();
     }
 }
@@ -72,7 +87,7 @@ function requireAdmin() {
  */
 function logout() {
     session_destroy();
-    header("Location: /public/login.php");
+    header("Location: " . getBaseUrl() . "/public/login.php");
     exit();
 }
 

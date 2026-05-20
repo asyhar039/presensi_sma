@@ -69,6 +69,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <a href="../guru/" class="nav-link"><i class="fas fa-chalkboard-user"></i> Data Guru</a>
             <a href="index.php" class="nav-link active"><i class="fas fa-school"></i> Data Kelas</a>
             <a href="../mapel/" class="nav-link"><i class="fas fa-book"></i> Mata Pelajaran</a>
+            <a href="../jadwal/" class="nav-link"><i class="fas fa-calendar-alt"></i> Jadwal Pelajaran</a>
+            <a href="../absensi/" class="nav-link"><i class="fas fa-clipboard-list"></i> Absensi</a>
+            <a href="../absensi/laporan.php" class="nav-link"><i class="fas fa-chart-bar"></i> Laporan Absensi</a>
             <hr style="border-color: rgba(255,255,255,0.2);">
             <a href="../../public/logout.php" class="nav-link"><i class="fas fa-sign-out-alt"></i> Logout</a>
         </nav>

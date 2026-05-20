@@ -92,7 +92,17 @@ if ($kelas_id > 0) {
             exit();
         }
     }
-    $siswa_list = getSiswaByKelas($kelas_id, $conn);
+    try {
+        $result = query("SELECT s.*, 
+                               r.total_hadir, r.total_izin, r.total_sakit, r.total_alfa 
+                        FROM siswa s 
+                        LEFT JOIN rekap_absensi r ON s.id = r.siswa_id AND r.bulan = $bulan AND r.tahun = $tahun 
+                        WHERE s.kelas_id = $kelas_id AND s.is_active = 1 
+                        ORDER BY s.nama_lengkap", $conn);
+        $siswa_list = $result->fetch_all(MYSQLI_ASSOC);
+    } catch (Exception $e) {
+        $siswa_list = [];
+    }
 } else {
     $siswa_list = [];
 }
@@ -135,6 +145,7 @@ if ($kelas_id > 0) {
             <a href="../kelas/" class="nav-link"><i class="fas fa-school"></i> Data Kelas</a>
             <?php if ($user['role'] === 'admin'): ?>
                 <a href="../mapel/" class="nav-link"><i class="fas fa-book"></i> Mata Pelajaran</a>
+                <a href="../jadwal/" class="nav-link"><i class="fas fa-calendar-alt"></i> Jadwal Pelajaran</a>
             <?php endif; ?>
             <a href="../absensi/" class="nav-link"><i class="fas fa-clipboard-list"></i> Absensi</a>
             <a href="../absensi/laporan.php" class="nav-link active"><i class="fas fa-chart-bar"></i> Laporan Absensi</a>
@@ -220,18 +231,14 @@ if ($kelas_id > 0) {
                             </thead>
                             <tbody>
                                 <?php foreach ($siswa_list as $idx => $s): ?>
-                                    <?php
-                                    $rekap_data = query("SELECT * FROM rekap_absensi WHERE siswa_id = {$s['id']} AND bulan = $bulan AND tahun = $tahun", $conn);
-                                    $rekap_row = $rekap_data->num_rows > 0 ? $rekap_data->fetch_assoc() : null;
-                                    ?>
                                     <tr>
                                         <td><?php echo ($idx + 1); ?></td>
                                         <td><?php echo htmlspecialchars($s['nisn']); ?></td>
                                         <td><?php echo htmlspecialchars($s['nama_lengkap']); ?></td>
-                                        <td style="text-align: center;"><span class="badge bg-success"><?php echo $rekap_row ? $rekap_row['total_hadir'] : 0; ?></span></td>
-                                        <td style="text-align: center;"><span class="badge bg-info"><?php echo $rekap_row ? $rekap_row['total_izin'] : 0; ?></span></td>
-                                        <td style="text-align: center;"><span class="badge bg-warning"><?php echo $rekap_row ? $rekap_row['total_sakit'] : 0; ?></span></td>
-                                        <td style="text-align: center;"><span class="badge bg-danger"><?php echo $rekap_row ? $rekap_row['total_alfa'] : 0; ?></span></td>
+                                        <td style="text-align: center;"><span class="badge bg-success"><?php echo isset($s['total_hadir']) ? $s['total_hadir'] : 0; ?></span></td>
+                                        <td style="text-align: center;"><span class="badge bg-info"><?php echo isset($s['total_izin']) ? $s['total_izin'] : 0; ?></span></td>
+                                        <td style="text-align: center;"><span class="badge bg-warning"><?php echo isset($s['total_sakit']) ? $s['total_sakit'] : 0; ?></span></td>
+                                        <td style="text-align: center;"><span class="badge bg-danger"><?php echo isset($s['total_alfa']) ? $s['total_alfa'] : 0; ?></span></td>
                                         <td>
                                             <a href="laporan.php?siswa_id=<?php echo $s['id']; ?>&bulan=<?php echo $bulan; ?>&tahun=<?php echo $tahun; ?>" class="btn btn-sm btn-info">
                                                 <i class="fas fa-eye"></i> Detail

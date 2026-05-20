@@ -36,14 +36,14 @@ if ($user['role'] !== 'admin') {
     $result = query("SELECT g.id FROM guru g JOIN users u ON g.user_id = u.id WHERE u.id = $user_id", $conn);
     if ($result->num_rows > 0) {
         $guru = $result->fetch_assoc();
-        $jadwal_result = query("SELECT * FROM jadwal_pelajaran WHERE kelas_id = $kelas_id AND guru_id = {$guru['id']}", $conn);
+        $jadwal_result = query("SELECT j.*, m.nama_mapel FROM jadwal_pelajaran j JOIN mata_pelajaran m ON j.mata_pelajaran_id = m.id WHERE j.kelas_id = $kelas_id AND j.guru_id = {$guru['id']}", $conn);
         $jadwal_list = $jadwal_result->fetch_all(MYSQLI_ASSOC);
     } else {
         $jadwal_list = [];
     }
 } else {
     // Admin can see all jadwal
-    $jadwal_result = query("SELECT * FROM jadwal_pelajaran WHERE kelas_id = $kelas_id", $conn);
+    $jadwal_result = query("SELECT j.*, m.nama_mapel FROM jadwal_pelajaran j JOIN mata_pelajaran m ON j.mata_pelajaran_id = m.id WHERE j.kelas_id = $kelas_id", $conn);
     $jadwal_list = $jadwal_result->fetch_all(MYSQLI_ASSOC);
 }
 
@@ -137,6 +137,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <a href="../kelas/" class="nav-link"><i class="fas fa-school"></i> Data Kelas</a>
             <?php if ($user['role'] === 'admin'): ?>
                 <a href="../mapel/" class="nav-link"><i class="fas fa-book"></i> Mata Pelajaran</a>
+                <a href="../jadwal/" class="nav-link"><i class="fas fa-calendar-alt"></i> Jadwal Pelajaran</a>
             <?php endif; ?>
             <a href="../absensi/" class="nav-link active"><i class="fas fa-clipboard-list"></i> Absensi</a>
             <a href="../absensi/laporan.php" class="nav-link"><i class="fas fa-chart-bar"></i> Laporan Absensi</a>
@@ -174,8 +175,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 <?php foreach ($jadwal_list as $jadwal): ?>
                                     <option value="<?php echo $jadwal['id']; ?>">
                                         <?php
-                                        $mapel = query("SELECT nama_mapel FROM mata_pelajaran WHERE id = {$jadwal['mata_pelajaran_id']}", $conn)->fetch_assoc();
-                                        echo htmlspecialchars($mapel['nama_mapel']) . " (" . $jadwal['hari'] . " " . substr($jadwal['jam_mulai'], 0, 5) . "-" . substr($jadwal['jam_selesai'], 0, 5) . ")";
+                                        echo htmlspecialchars($jadwal['nama_mapel']) . " (" . $jadwal['hari'] . " " . substr($jadwal['jam_mulai'], 0, 5) . "-" . substr($jadwal['jam_selesai'], 0, 5) . ")";
                                         ?>
                                     </option>
                                 <?php endforeach; ?>

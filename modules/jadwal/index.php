@@ -6,14 +6,19 @@ require_once __DIR__ . '/../../app/helpers.php';
 
 requireAdmin();
 
+$message = getFlashMessage();
+
 try {
-    $result = query("SELECT m.*, u.nama_lengkap as guru_nama FROM mata_pelajaran m 
-                    JOIN guru g ON m.guru_id = g.id 
+    $result = query("SELECT j.*, k.nama_kelas, m.nama_mapel, u.nama_lengkap as guru_nama 
+                    FROM jadwal_pelajaran j 
+                    JOIN kelas k ON j.kelas_id = k.id 
+                    JOIN mata_pelajaran m ON j.mata_pelajaran_id = m.id 
+                    JOIN guru g ON j.guru_id = g.id 
                     JOIN users u ON g.user_id = u.id 
-                    ORDER BY m.nama_mapel", $conn);
-    $mapel_list = $result->fetch_all(MYSQLI_ASSOC);
+                    ORDER BY k.nama_kelas, FIELD(j.hari, 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'), j.jam_mulai", $conn);
+    $jadwal_list = $result->fetch_all(MYSQLI_ASSOC);
 } catch (Exception $e) {
-    $mapel_list = [];
+    $jadwal_list = [];
 }
 ?>
 <!DOCTYPE html>
@@ -21,7 +26,7 @@ try {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mata Pelajaran - Sistem Absensi SMA</title>
+    <title>Jadwal Pelajaran - Sistem Absensi SMA</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
@@ -45,8 +50,8 @@ try {
             <a href="../siswa/" class="nav-link"><i class="fas fa-users"></i> Data Siswa</a>
             <a href="../guru/" class="nav-link"><i class="fas fa-chalkboard-user"></i> Data Guru</a>
             <a href="../kelas/" class="nav-link"><i class="fas fa-school"></i> Data Kelas</a>
-            <a href="../mapel/" class="nav-link active"><i class="fas fa-book"></i> Mata Pelajaran</a>
-            <a href="../jadwal/" class="nav-link"><i class="fas fa-calendar-alt"></i> Jadwal Pelajaran</a>
+            <a href="../mapel/" class="nav-link"><i class="fas fa-book"></i> Mata Pelajaran</a>
+            <a href="../jadwal/" class="nav-link active"><i class="fas fa-calendar-alt"></i> Jadwal Pelajaran</a>
             <a href="../absensi/" class="nav-link"><i class="fas fa-clipboard-list"></i> Absensi</a>
             <a href="../absensi/laporan.php" class="nav-link"><i class="fas fa-chart-bar"></i> Laporan Absensi</a>
             <hr style="border-color: rgba(255,255,255,0.2);">
@@ -56,9 +61,11 @@ try {
 
     <div class="main-content">
         <div class="topbar">
-            <h4>📖 Mata Pelajaran</h4>
-            <a href="add.php" class="btn btn-primary"><i class="fas fa-plus"></i> Tambah Mapel</a>
+            <h4>📅 Jadwal Pelajaran</h4>
+            <a href="add.php" class="btn btn-primary"><i class="fas fa-plus"></i> Tambah Jadwal</a>
         </div>
+
+        <?php if ($message) echo $message; ?>
 
         <div class="card">
             <div class="card-body">
@@ -67,26 +74,30 @@ try {
                         <thead>
                             <tr>
                                 <th>No.</th>
-                                <th>Nama Mapel</th>
-                                <th>Kode Mapel</th>
-                                <th>Guru Pengampu</th>
+                                <th>Kelas</th>
+                                <th>Mata Pelajaran</th>
+                                <th>Guru Pengajar</th>
+                                <th>Hari</th>
+                                <th>Jam</th>
                                 <th>Aksi</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <?php if (empty($mapel_list)): ?>
-                                <tr><td colspan="5" class="text-center py-4">Tidak ada data mata pelajaran</td></tr>
+                            <?php if (empty($jadwal_list)): ?>
+                                <tr><td colspan="7" class="text-center py-4">Tidak ada data jadwal pelajaran</td></tr>
                             <?php else: ?>
-                                <?php foreach ($mapel_list as $idx => $mapel): ?>
+                                <?php foreach ($jadwal_list as $idx => $j): ?>
                                     <tr>
                                         <td><?php echo ($idx + 1); ?></td>
-                                        <td><strong><?php echo htmlspecialchars($mapel['nama_mapel']); ?></strong></td>
-                                        <td><?php echo htmlspecialchars($mapel['kode_mapel'] ?? '-'); ?></td>
-                                        <td><?php echo htmlspecialchars($mapel['guru_nama']); ?></td>
+                                        <td><strong><?php echo htmlspecialchars($j['nama_kelas']); ?></strong></td>
+                                        <td><?php echo htmlspecialchars($j['nama_mapel']); ?></td>
+                                        <td><?php echo htmlspecialchars($j['guru_nama']); ?></td>
+                                        <td><span class="badge bg-secondary"><?php echo htmlspecialchars($j['hari']); ?></span></td>
+                                        <td><?php echo substr($j['jam_mulai'], 0, 5) . " - " . substr($j['jam_selesai'], 0, 5); ?></td>
                                         <td>
                                             <div class="action-buttons">
-                                                <a href="edit.php?id=<?php echo $mapel['id']; ?>" class="btn btn-sm btn-info"><i class="fas fa-edit"></i></a>
-                                                <a href="delete.php?id=<?php echo $mapel['id']; ?>" class="btn btn-sm btn-danger" onclick="return confirm('Yakin hapus?')"><i class="fas fa-trash"></i></a>
+                                                <a href="edit.php?id=<?php echo $j['id']; ?>" class="btn btn-sm btn-info text-white"><i class="fas fa-edit"></i> Edit</a>
+                                                <a href="delete.php?id=<?php echo $j['id']; ?>" class="btn btn-sm btn-danger" onclick="return confirm('Yakin ingin menghapus jadwal ini?')"><i class="fas fa-trash"></i> Hapus</a>
                                             </div>
                                         </td>
                                     </tr>
